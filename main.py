@@ -4,13 +4,18 @@ from watchdog.events import FileSystemEventHandler
 import pandas as pd
 from datetime import datetime
 import logging
+import os
 
 logging.basicConfig(filename='datalog.log', filemode='a', format='%(asctime)s %(message)s')
 
-watchDir = r'watchThisFolder'
+watchDir = os.path.join('watchThisFolder')
 DB_NAME = "dataDumper"
 DB_USER = "root"
 DB_PASSWORD = "Pavan@123"
+HOSTNAME = '127.0.0.1'
+
+flagTime = 0
+
 
 class Watcher:
     DIRECTORY_TO_WATCH = watchDir
@@ -55,7 +60,7 @@ def create_database(cursor,cnx):
 
 def insertintomysql(df):
     cnx = mysql.connector.connect(user=DB_USER, password=DB_PASSWORD,
-                              auth_plugin='mysql_native_password')
+                              auth_plugin='mysql_native_password', host = HOSTNAME)
     cursor = cnx.cursor()
     TABLES = {}
     TABLES['data'] = ("CREATE TABLE `data` ("
@@ -163,23 +168,31 @@ def helper(filePath):
 class Handler(FileSystemEventHandler):
 
     @staticmethod
-    def on_any_event(event):
+
+    def convertTime(s):
+        return s.second + s.minute*60 + s.hour*3600
+
+    def on_any_event(self,event):
+        global flagTime
         if event.is_directory:
             return None
 
         elif event.event_type == 'created':
+            x = str(event.src_path)
+            if(x[-1]=='x' or x[-1]=='s'):
             # Take any action here when a file is first created.
-            print("Received created event - %s." % event.src_path)
-            logging.warning("Created File")
-
+                print("Received created event - %s." % event.src_path)
+                logging.warning("Created File")
         elif event.event_type == 'modified':
             x = str(event.src_path)
             # print(x)
-            if(x[-1]=='x' or x[-1]=='s'):
+            if( (x[-1]=='x' or x[-1]=='s' ) and ( flagTime == 0 or self.convertTime(datetime.now()) - flagTime > 5 ) ):
                 helper(event.src_path)
             # Taken any action here when a file is modified.
                 print("Received modified event - %s." % event.src_path)
-                logging.warning("New File Recieved")
+                logging.warning("File has been modified")
+                flagTime = self.convertTime(datetime.now())
+
 
 w = Watcher()
 w.run()
